@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📖</text></svg>">
+  <meta name="description"
+    content="Search, read, and discover books with AI-powered recommendations from the Internet Archive.">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap"
+    rel="stylesheet">
+</head>
+
+<body>
+  <!-- Preloader -->
+  <div id="preloader">
+    <div class="preloader-content">
+      <div class="loader-spinner"></div>
+      <h2 class="loader-title">Librarium</h2>
+      <p class="loader-subtitle">Loading your reading experience...</p>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header id="app-header">
+    <div class="header-inner">
+      <a href="#" class="logo" id="logo-link">
+        <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+          <line x1="8" y1="7" x2="16" y2="7" />
+          <line x1="8" y1="11" x2="14" y2="11" />
+        </svg>
+        <span class="logo-text">Librarium</span>
+      </a>
+      <nav class="header-nav">
+        <button class="nav-btn active" data-view="search" id="nav-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <span>Discover</span>
+        </button>
+        <button class="nav-btn" data-view="library" id="nav-library">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+          </svg>
+          <span>My Library</span>
+          <span class="badge" id="library-badge" style="display:none;">0</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main id="main-content">
+
+    <!-- Search / Discover View -->
+    <section id="view-search" class="view active">
+      <div class="hero-section">
+        <h1 class="hero-title">Discover Your Next<br><em>Great Read</em></h1>
+        <p class="hero-subtitle">Explore millions of free books from the Internet Archive</p>
+        <div class="search-container">
+          <div class="search-box">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input type="text" id="search-input" placeholder="Search by title, author, or subject..."
+              autocomplete="off">
+            <button id="search-btn" class="search-submit" aria-label="Search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12" />
+                <polyline points="12 5 19 12 12 19" />
+              </svg>
+            </button>
+          </div>
+          <div class="search-suggestions">
+            <span class="suggestion-label">Try:</span>
+            <button class="suggestion-chip" data-query="science fiction">Science Fiction</button>
+            <button class="suggestion-chip" data-query="classic literature">Classics</button>
+            <button class="suggestion-chip" data-query="philosophy">Philosophy</button>
+            <button class="suggestion-chip" data-query="history">History</button>
+            <button class="suggestion-chip" data-query="poetry">Poetry</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Search Results -->
+      <div id="search-results-section" class="results-section" style="display:none;">
+        <div class="results-header">
+          <h2 id="results-title" class="results-title">Search Results</h2>
+          <span id="results-count" class="results-count"></span>
+        </div>
+        <div id="search-results" class="book-grid"></div>
+        <div id="search-loading" class="loading-state" style="display:none;">
+          <div class="spinner"></div>
+          <p>Searching the archive...</p>
+        </div>
+        <div id="search-empty" class="empty-state" style="display:none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+            stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            <line x1="8" y1="11" x2="14" y2="11" />
+          </svg>
+          <p>No books found. Try a different search term.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- My Library View -->
+    <section id="view-library" class="view">
+      <div class="library-header">
+        <h1 class="section-title">My Library</h1>
+        <p class="section-subtitle">Your saved books, ready to read anytime</p>
+      </div>
+      <div id="library-books" class="book-grid"></div>
+      <div id="library-empty" class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+          stroke-linejoin="round">
+          <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+          <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+        </svg>
+        <h3>Your library is empty</h3>
+        <p>Search for books and save them here for easy access.</p>
+        <button class="btn-primary" id="go-discover">Start Discovering</button>
+      </div>
+    </section>
+
+    <!-- Book Reader View -->
+    <section id="view-reader" class="view">
+      <div class="reader-toolbar">
+        <button id="reader-back" class="btn-icon" aria-label="Go back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
+          <span>Back</span>
+        </button>
+        <div class="reader-info">
+          <h3 id="reader-title"></h3>
+          <span id="reader-author"></span>
+        </div>
+        <div class="reader-actions">
+          <button id="reader-save" class="btn-icon" aria-label="Save book">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+            </svg>
+          </button>
+          <a id="reader-external" href="#" target="_blank" rel="noopener noreferrer" class="btn-icon"
+              aria-label="Open on Internet Archive">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+           </svg>
+          </a>
+        </div>
+      </div>
+      <div class="reader-container">
+        <div id="pdf-viewer" style="width:100%; height:100%; overflow:auto;"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Chat Widget -->
+  <div id="chat-widget">
+    <button id="chat-toggle" class="chat-fab" aria-label="Open book assistant">
+      <svg class="chat-icon-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      </svg>
+      <svg class="chat-icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18" />
+        <line x1="6" y1="6" x2="18" y2="18" />
+      </svg>
+    </button>
+
+    <div id="chat-panel" class="chat-panel">
+      <div class="chat-header">
+        <div class="chat-header-info">
+          <div class="chat-avatar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          </div>
+          <div>
+            <h4>Book Assistant</h4>
+            <span class="chat-status">Powered by AI</span>
+          </div>
+        </div>
+        <button id="chat-settings-toggle" class="btn-icon-sm" aria-label="Chat settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- API Key Setup -->
+      <div id="chat-setup" class="chat-setup">
+        <div class="setup-content">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+            stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+          <h4>Connect Your AI</h4>
+          <p>Enter your OpenRouter API key to enable AI-powered book recommendations.</p>
+          <div class="setup-input-group">
+            <input type="password" id="api-key-input" placeholder="sk-or-v1-..." autocomplete="off">
+            <button id="api-key-save" class="btn-primary">Connect</button>
+          </div>
+          <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" class="setup-link">Get a free
+            API key</a>
+        </div>
+      </div>
+
+      <!-- Chat Messages -->
+      <div id="chat-messages" class="chat-messages" style="display:none;">
+        <div class="message assistant">
+          <div class="message-content">
+            <p>Hello! I'm your book assistant. Tell me what genres or topics you enjoy, and I'll recommend books you
+              might love. You can also ask me about any book you've found!</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat Input -->
+      <div id="chat-input-area" class="chat-input-area" style="display:none;">
+        <div class="chat-input-box">
+          <textarea id="chat-input" placeholder="Ask for book recommendations..." rows="1"></textarea>
+          <button id="chat-send" class="chat-send-btn" aria-label="Send message" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13" />
+              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Settings Panel -->
+      <div id="chat-settings" class="chat-settings" style="display:none;">
+        <div class="settings-row">
+          <label for="settings-api-key">API Key</label>
+          <div class="settings-input-row">
+            <input type="password" id="settings-api-key" placeholder="sk-or-v1-...">
+            <button id="settings-api-save" class="btn-sm">Update</button>
+          </div>
+        </div>
+        <div class="settings-row">
+          <label for="settings-model">Model</label>
+          <select id="settings-model">
+            <option value="google/gemini-2.0-flash-001">Gemini 2.0 Flash (Free)</option>
+            <option value="meta-llama/llama-4-maverick:free">Llama 4 Maverick (Free)</option>
+            <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
+            <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+            <option value="google/gemini-pro-1.5">Gemini Pro 1.5</option>
+          </select>
+        </div>
+        <button id="chat-clear" class="btn-danger-sm">Clear Chat History</button>
+        <button id="settings-close" class="btn-sm">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast" aria-live="polite"></div>
+  <script src="/app.js"></script>
+</body>
+
+</html>
