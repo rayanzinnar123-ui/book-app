@@ -8,7 +8,7 @@
     href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📖</text></svg>">
   <meta name="description"
     content="Search, read, and discover books with AI-powered recommendations from the Internet Archive.">
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="styles.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -118,6 +118,11 @@
           <p>No books found. Try a different search term.</p>
         </div>
       </div>
+      <!-- recommendations for search view -->
+      <div class="recommendations-section" id="rec-search" style="display:none;">
+        <h3>Recommended for you</h3>
+        <div id="recommendations-search" class="book-grid"></div>
+      </div>
     </section>
 
     <!-- My Library View -->
@@ -174,6 +179,10 @@
       </div>
       <div class="reader-container">
         <div id="pdf-viewer" style="width:100%; height:100%; overflow:auto;"></div>
+      </div>
+      <div class="recommendations-section">
+        <h3>Recommended for you</h3>
+        <div id="recommendations" class="book-grid"></div>
       </div>
     </section>
   </main>
@@ -286,7 +295,7 @@
 
   <!-- Toast Notification -->
   <div id="toast" class="toast" aria-live="polite"></div>
-  <script src="/app.js"></script>
+  <script src="app.js"></script>
 </body>
 
 </html>
