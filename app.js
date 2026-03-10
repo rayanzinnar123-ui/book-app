@@ -155,14 +155,41 @@
    // listener also strips out any non-alphanumeric characters up front so
    // users can't stuff symbols into a banned term ("$ex" -> "sex").
    // normalization below still removes any stray punctuation for matching.
+
+   function normalizeText(text) {
+      return text
+         .toLowerCase()
+         .replace(/3/g, 'e')
+         .replace(/1/g, 'i')
+         .replace(/0/g, 'o')
+         .replace(/5/g, 's')
+         .replace(/4/g, 'a')
+         .replace(/7/g, 't');
+   }
+
+   // escape string for use in a regular expression
+   function escapeRegex(str) {
+      return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+   }
+
    function isQuerySafe(q) {
       if (!q) return true;
-      const norm = q.toLowerCase().replace(/[^a-z0-9 ]/g, '');
-      // build list here so we don't reference NSFW_TERMS/HENTAI_TITLES before
-      // they're defined – the previous constant caused a runtime error that
-      // prevented the script from finishing, leaving the preloader visible.
+
+      // normalize leetspeak, convert separators to spaces, and strip any
+      // remaining characters that aren't alphanumeric or whitespace.  dots,
+      // dashes and underscores are treated as word boundaries so "bra." will
+      // still match but "brave" will not.
+      const norm = normalizeText(q)
+         .replace(/[\-_.]/g, ' ')
+         .replace(/[^a-z0-9 ]/g, '');
+
       const banned = [...NSFW_TERMS, ...HENTAI_TITLES];
-      return !banned.some(term => norm.includes(term));
+
+      // check each banned term with word boundaries so substrings don't trigger.
+      return !banned.some(term => {
+         const re = new RegExp('\\b' + escapeRegex(term) + '\\b', 'i');
+         return re.test(norm);
+      });
    }
    async function searchBooks(q, page = 1) {
       if (!q) return;
@@ -238,7 +265,7 @@
       'stripper', 'strip club', 'sex worker', 'adult film', 'porn film', 'porn star',
 
       'hentai', 'ecchi', 'yaoi', 'yuri', 'doujin', 'doujinshi', 'rule34', 'fanservice',
-      'lewd', 'pervy', 'perverted',
+      'lewd', 'pervy', 'perverted', 'nigga',
 
       'incest', 'stepmom', 'stepmother', 'stepdad', 'stepfather', 'stepbrother', 'stepsister',
       'forbidden family', 'taboo family',
@@ -540,108 +567,116 @@
    // prevent typing banned terms live
    dom.searchInput.addEventListener('input', e => {
       let val = dom.searchInput.value;
-      // strip out any symbols immediately so they can't be used to
-      // circumvent the filter (e.g. "$ex" for "sex"). only allow
-      // letters, numbers and spaces in the search box.
-      const cleaned = val.replace(/[^a-z0-9 ]/gi, '');
+      // allow letters, numbers, spaces and common word separators (.-_). the
+      // normalization step in isQuerySafe treats those separators as boundaries
+      // when checking against banned terms.
+      const cleaned = val.replace(/[^a-z0-9 .\-_]/gi, '');
       if (cleaned !== val) {
          dom.searchInput.value = cleaned;
          val = cleaned;
-         showToast('Symbols are not allowed');
+         showToast('Only letters, numbers and .-_ are allowed');
       }
-      // if the query contains a banned term, clear the box entirely
-      if (!isQuerySafe(val)) {
-         dom.searchInput.value = '';
-         showToast('That word isn\'t allowed');
+      // only validate words that have been terminated by a separator
+      let toTest = val;
+      if (!/[\s._-]$/.test(val)) {
+         // drop the current trailing partial word
+         toTest = val.replace(/\b[^\s._-]+$/, '');
       }
-   });
-   if (dom.readerBack) dom.readerBack.addEventListener('click', closeReader);
-
-   // suggestion chips
-   document.querySelectorAll('.suggestion-chip').forEach(chip => {
-      chip.addEventListener('click', () => searchBooks(chip.dataset.query));
-   });
-
-   dom.navSearch.addEventListener('click', () => switchView('search'));
-   dom.navLibrary.addEventListener('click', () => switchView('library'));
-
-   // simple chat toggle/send (no AI)
-   dom.chatToggle.addEventListener('click', () => {
-      const opening = !dom.chatPanel.classList.contains('open');
-      dom.chatPanel.classList.toggle('open');
-      if (opening) {
-         // make sure the message area/input are visible
-         if (dom.chatMessages) dom.chatMessages.style.display = 'block';
-         if (dom.chatInputArea) dom.chatInputArea.style.display = 'block';
-         if (dom.chatMessages && dom.chatMessages.children.length === 0) {
-            const m = document.createElement('div');
-            m.className = 'message assistant';
-            const inner = document.createElement('div');
-            inner.className = 'message-content';
-            inner.textContent = 'Hello! I can recommend books for you.';
-            m.appendChild(inner);
-            dom.chatMessages.appendChild(m);
-         }
-      }
-   });
-   // chat settings toggle/clear
-   const settingsToggle = document.getElementById('chat-settings-toggle');
-   const settingsPanel = document.getElementById('chat-settings');
-   if (settingsToggle && settingsPanel) {
-      settingsToggle.addEventListener('click', () => {
-         const visible = settingsPanel.style.display === 'block';
-         settingsPanel.style.display = visible ? 'none' : 'block';
-      });
+   if (toTest && !isQuerySafe(toTest)) {
+      // remove the offending completed word but leave the rest of the input
+      // intact. the regex below strips the last word and any trailing
+      // separator that triggered the check.
+      dom.searchInput.value = val.replace(/[^\s._-]*[\s._-]?$/, '');
+      showToast('That word isn\'t allowed');
    }
-   // clear history button inside settings
-   const clearBtn = document.getElementById('settings-chat-clear');
-   if (clearBtn) {
-      clearBtn.addEventListener('click', () => {
-         state.chatMessages = [];
-         localStorage.setItem('librarium-chat', JSON.stringify(state.chatMessages));
-         renderChatMessages();
-         showToast('Chat history cleared');
-      });
+});
+if (dom.readerBack) dom.readerBack.addEventListener('click', closeReader);
+
+// suggestion chips
+document.querySelectorAll('.suggestion-chip').forEach(chip => {
+   chip.addEventListener('click', () => searchBooks(chip.dataset.query));
+});
+
+dom.navSearch.addEventListener('click', () => switchView('search'));
+dom.navLibrary.addEventListener('click', () => switchView('library'));
+
+// simple chat toggle/send (no AI)
+dom.chatToggle.addEventListener('click', () => {
+   const opening = !dom.chatPanel.classList.contains('open');
+   dom.chatPanel.classList.toggle('open');
+   if (opening) {
+      // make sure the message area/input are visible
+      if (dom.chatMessages) dom.chatMessages.style.display = 'block';
+      if (dom.chatInputArea) dom.chatInputArea.style.display = 'block';
+      if (dom.chatMessages && dom.chatMessages.children.length === 0) {
+         const m = document.createElement('div');
+         m.className = 'message assistant';
+         const inner = document.createElement('div');
+         inner.className = 'message-content';
+         inner.textContent = 'Hello! I can recommend books for you.';
+         m.appendChild(inner);
+         dom.chatMessages.appendChild(m);
+      }
    }
-   dom.chatSend.addEventListener('click', sendChatMessage);
-   dom.chatInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.shiftKey) {
+});
+// chat settings toggle/clear
+const settingsToggle = document.getElementById('chat-settings-toggle');
+const settingsPanel = document.getElementById('chat-settings');
+if (settingsToggle && settingsPanel) {
+   settingsToggle.addEventListener('click', () => {
+      const visible = settingsPanel.style.display === 'block';
+      settingsPanel.style.display = visible ? 'none' : 'block';
+   });
+}
+// clear history button inside settings
+const clearBtn = document.getElementById('settings-chat-clear');
+if (clearBtn) {
+   clearBtn.addEventListener('click', () => {
+      state.chatMessages = [];
+      localStorage.setItem('librarium-chat', JSON.stringify(state.chatMessages));
+      renderChatMessages();
+      showToast('Chat history cleared');
+   });
+}
+dom.chatSend.addEventListener('click', sendChatMessage);
+dom.chatInput.addEventListener('keydown', e => {
+   if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendChatMessage();
+   }
+});
+
+// api key setup
+if (dom.apiKeySave) {
+   dom.apiKeySave.addEventListener('click', () => {
+      const val = dom.apiKeyInput.value.trim();
+      if (!val) return;
+      state.apiKey = val;
+      localStorage.setItem('librarium-api-key', state.apiKey);
+      updateChatUI();
+      showToast('API key saved');
+   });
+}
+if (dom.apiKeyInput) {
+   dom.apiKeyInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
          e.preventDefault();
-         sendChatMessage();
+         dom.apiKeySave && dom.apiKeySave.click();
       }
    });
-
-   // api key setup
-   if (dom.apiKeySave) {
-      dom.apiKeySave.addEventListener('click', () => {
-         const val = dom.apiKeyInput.value.trim();
-         if (!val) return;
-         state.apiKey = val;
-         localStorage.setItem('librarium-api-key', state.apiKey);
-         updateChatUI();
-         showToast('API key saved');
-      });
-   }
-   if (dom.apiKeyInput) {
-      dom.apiKeyInput.addEventListener('keydown', e => {
-         if (e.key === 'Enter') {
-            e.preventDefault();
-            dom.apiKeySave && dom.apiKeySave.click();
-         }
-      });
-   }
-   // no key setup needed for Imagga (hard-coded)
-   updateBadge();
-   if (state.apiKey && dom.apiKeyInput) dom.apiKeyInput.value = state.apiKey;
-   // no deep api key to initialize
-   updateChatUI();
-   // show recommendations for most recently viewed book on load
-   console.log('initial viewed', state.viewed);
-   if (state.viewed.length > 0) {
-      const last = state.viewed[state.viewed.length - 1];
-      console.log('initial recommending for', last);
-      fetchRecommendations(last);
-   }
+}
+// no key setup needed for Imagga (hard-coded)
+updateBadge();
+if (state.apiKey && dom.apiKeyInput) dom.apiKeyInput.value = state.apiKey;
+// no deep api key to initialize
+updateChatUI();
+// show recommendations for most recently viewed book on load
+console.log('initial viewed', state.viewed);
+if (state.viewed.length > 0) {
+   const last = state.viewed[state.viewed.length - 1];
+   console.log('initial recommending for', last);
+   fetchRecommendations(last);
+}
 })();
 
 // hide preloader when page finishes loading
