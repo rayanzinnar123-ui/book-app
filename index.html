@@ -7,7 +7,7 @@
   <link rel="icon"
     href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📖</text></svg>">
   <meta name="description"
-    content="Search, read, and discover books with AI-powered recommendations from the Internet Archive.">
+    content="Search, read, and discover books with AI-powered recommendations from Google Books.">
   <link rel="stylesheet" href="styles.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -68,7 +68,7 @@
     <section id="view-search" class="view active">
       <div class="hero-section">
         <h1 class="hero-title">Discover Your Next<br><em>Great Read</em></h1>
-        <p class="hero-subtitle">Explore millions of free books from the Internet Archive</p>
+        <p class="hero-subtitle">Explore millions of books from Google Books</p>
         <div class="search-container">
           <div class="search-box">
             <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -106,7 +106,7 @@
         <div id="search-results" class="book-grid"></div>
         <div id="search-loading" class="loading-state" style="display:none;">
           <div class="spinner"></div>
-          <p>Searching the archive...</p>
+          <p>Searching Google Books...</p>
         </div>
         <div id="search-empty" class="empty-state" style="display:none;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
@@ -162,7 +162,7 @@
             </svg>
           </button>
           <a id="reader-external" href="#" target="_blank" rel="noopener noreferrer" class="btn-icon"
-              aria-label="Open on Internet Archive">
+              aria-label="Open on Google Books">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                 stroke-linejoin="round">
                 <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
@@ -271,6 +271,9 @@
             <input type="password" id="settings-api-key" placeholder="sk-or-v1-...">
             <button id="settings-api-save" class="btn-sm">Update</button>
           </div>
+        </div>
+        <div class="settings-row">
+          <button id="settings-chat-clear" class="btn-sm" style="color:#c00;">Clear chat history</button>
         </div>
         <div class="settings-row">
           <label for="settings-model">Model</label>

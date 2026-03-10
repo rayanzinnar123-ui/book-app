@@ -51,7 +51,8 @@
     readerAuthor: document.getElementById('reader-author'),
     // api key
     apiKeyInput: document.getElementById('api-key-input'),
-    apiKeySave: document.getElementById('api-key-save')
+    apiKeySave: document.getElementById('api-key-save'),
+    // no dynamic key: using Imagga API key fixed below
   };
 
   function showToast(msg){
@@ -154,22 +155,37 @@
      if(!q.trim())return;
      state.searchQuery = q.trim();
      state.currentPage = page;
-     // make sure we're in the search view and show results container
      switchView('search');
      if (dom.resultsSection) dom.resultsSection.style.display = 'block';
      dom.results.innerHTML='Searching…';
-     const url = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(q)}+mediatype:texts&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=date&fl[]=subject&sort[]=downloads+desc&rows=${state.rowsPerPage}&page=${page}&output=json`;
+     // Google Books API uses startIndex for pagination
+     const start = (page - 1) * state.rowsPerPage;
+     const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&startIndex=${start}&maxResults=${state.rowsPerPage}`;
      try{
-        const r=await fetch(url);
-        const d=await r.json();
-        currentDocs=(d.response.docs||[]).filter(isSafeBook);
-        // numFound is the total returned by the API; after filtering the
-        // actual shown count may be smaller but we don't adjust the totalPages
-        // calculation since it's based on server-side results.
-        state.numFound = d.response.numFound || 0;
-        state.totalPages = Math.ceil(state.numFound / state.rowsPerPage);
+        const r = await fetch(url);
+        const d = await r.json();
+        const totalItems = d.totalItems || 0;
+        // normalize items into our book format
+        const docs = (d.items || []).map(item=>{
+           const info = item.volumeInfo || {};
+           return {
+              identifier: item.id,
+              title: info.title || 'Untitled',
+              creator: (info.authors && info.authors[0]) || 'Unknown',
+              subject: info.categories || [],
+              coverImage: info.imageLinks?.thumbnail || '',
+              previewLink: info.previewLink || info.infoLink || ''
+           };
+        });
+        currentDocs = docs.filter(isSafeBook);
+        currentDocs = await filterDocsByCover(currentDocs);
+        // clamp large totals to avoid billions-of-results weirdness
+        state.numFound = totalItems;
+        const displayTotal = state.numFound > 1000000 ? '>1,000,000' : state.numFound;
+        const pagesBase = state.numFound > 1000000 ? 1000000 : state.numFound;
+        state.totalPages = Math.ceil(pagesBase / state.rowsPerPage);
         if(dom.resultsTitle) dom.resultsTitle.textContent = `Results for "${state.searchQuery}" - Page ${page} of ${state.totalPages}`;
-        if(dom.resultsCount) dom.resultsCount.textContent = `${state.numFound} books found (${currentDocs.length} shown)`;
+        if(dom.resultsCount) dom.resultsCount.textContent = `${displayTotal} books found (${currentDocs.length} shown)`;
         renderResults(currentDocs);
         renderPagination();
      }catch(e){
@@ -180,26 +196,17 @@
   // terms will be hidden from the UI.  This is deliberately lightweight; more
   // advanced checks could be added later.
   const NSFW_TERMS = [
-    'porn',
-    'pornography',
-    'xxx',
-    'erotic',
-    'adult',
-    'nudity',
-    'sex',
-    'nsfw',
-    'hentai',
-    'bdsm',
-    'fetish',
-    'hardcore',
-    'softcore',
-    'explicit',
-    'uncensored',
-    'anal',
-    'oral',
-    'incest',
-    'bestiality',
-  ];
+  // sexual content
+  'porn', 'pornography', 'xxx', 'erotic', 'adult', 'nudity', 'sex', 'nsfw', 
+  'hentai', 'bdsm', 'fetish', 'hardcore', 'softcore', 'explicit', 'uncensored',
+  'anal', 'oral', 'incest', 'bestiality', 'sexual', 'sexuality', 'masturbation', 
+  'cum', 'orgy', 'sexually explicit', 'rapey', 'prostitute', 'prostitution', 
+  'stripper', 'striptease', 'escort', 'erotica', 'pornographic', 'kink', 
+  'voyeur', 'adult content', 'adult material', 'sex scenes', 'adult novel', 
+  'nude photos', 'porn star', 'fetishism', 'sex toys', 'erotic fiction', 'soft porn', 
+  'porn star', 'seduction', 'sexual act', 'adult film', 'porn film', 'porno', 
+  'sexual abuse', 'sexual assault', 'sexploitation', 'naked', 'sexually explicit material'
+];
 
   function isSafeBook(book) {
     if(!book) return false;
@@ -213,6 +220,47 @@
     return !NSFW_TERMS.some(term => text.includes(term));
   }
 
+  // cover-based check using an external NSFW detection service.  it takes the
+  // URL of the image and returns true if it's considered safe.  this API is
+  // fictitious; replace with a real service (Sightengine, Google Vision, etc.)
+  // cover-based sanity check using Imagga's Content Moderation API.  a
+  // hard-coded API key is used; no user input is required as per the request.
+  async function isCoverSafe(imageUrl) {
+    try {
+      const resp = await fetch('https://api.imagga.com/v2/contentmoderation?image_url=' + encodeURIComponent(imageUrl), {
+        headers: {
+          Authorization: 'Basic ' + btoa('acc_bbe8bdcfd915db6:'),
+        }
+      });
+      const data = await resp.json();
+      // Imagga returns moderation categories; consider pornographic/explicit
+      // if any confidence above threshold.
+      const result = data.result || {};
+      const categories = result.categories || {};
+      // categories.pornography might exist with confidence value
+      if(categories.pornography && categories.pornography.confidence > 0.5) {
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.warn('cover check failed', err);
+      return true;
+    }
+  }
+
+  // filter a list of docs by running their covers through the NSFW check.
+  // returns a new array containing only the safe ones.
+  async function filterDocsByCover(docs) {
+    const results = [];
+    await Promise.all(docs.map(async b => {
+      const url = b.coverImage || '';
+      if (await isCoverSafe(url)) {
+        results.push(b);
+      }
+    }));
+    return results;
+  }
+
   function renderResults(docs, container = dom.results){
      container.innerHTML='';
      docs.filter(isSafeBook).forEach(b=>{
@@ -222,7 +270,7 @@
         // cover image
         const cover = document.createElement('img');
         cover.className = 'book-cover';
-        cover.src = `https://archive.org/services/img/${b.identifier}`;
+        cover.src = b.coverImage || '';
         cover.alt = b.title || 'Cover';
         cover.onerror = () => cover.style.display = 'none';
         card.appendChild(cover);
@@ -288,10 +336,12 @@
      if(view === 'library') renderLibrary();
   }
 
-  function renderLibrary(){
+  async function renderLibrary(){
      // filter out any NSFW items that might have been added before the
      // filter was in place.
-     const safeLib = state.library.filter(isSafeBook);
+     let safeLib = state.library.filter(isSafeBook);
+     // also check the covers
+     safeLib = await filterDocsByCover(safeLib);
      if (safeLib.length === 0) {
         dom.libraryBooks.innerHTML = '';
         if(dom.libraryEmpty) dom.libraryEmpty.style.display = 'block';
@@ -304,36 +354,35 @@
   // recommendations algorithm
   async function fetchRecommendations(book){
      console.log('fetchRecommendations for', book);
-     // prefer subject tags when available
-     let url;
-     let subjects = [];
+     let query = '';
      if(book.subject){
-        if(Array.isArray(book.subject)) subjects = book.subject;
-        else if(typeof book.subject === 'string'){
-           subjects = book.subject.split(/[;,]+/).map(s=>s.trim()).filter(Boolean);
-        }
+        if(Array.isArray(book.subject) && book.subject.length) query = 'subject:' + book.subject[0];
+        else if(typeof book.subject === 'string') query = 'subject:' + book.subject;
      }
-     if(subjects.length){
-        console.log('using subjects', subjects);
-        const terms = subjects.slice(0,5)
-            .map(t=>`subject:${encodeURIComponent(t)}`)
-            .join('%20OR%20');
-        url = `https://archive.org/advancedsearch.php?q=${terms}+mediatype:texts&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=subject&sort[]=downloads+desc&rows=10&page=1&output=json`;
-     } else {
-        const q = book.title || '';
-        if(!q) return;
-        console.log('no subjects; using title', q);
-        url = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(q)}+mediatype:texts&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=subject&sort[]=downloads+desc&rows=10&page=1&output=json`;
+     if(!query){
+        if(book.title) query = 'intitle:' + book.title;
+        else return;
      }
-     console.log('recommendation URL', url);
+     const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=10`;
      try{
         const r = await fetch(url);
         const d = await r.json();
-        const docs = d.response.docs || [];
-        state.recommendations = docs
-           .filter(b=>b.identifier!==book.identifier)
-           .filter(isSafeBook)
-           .slice(0,5);
+        const docs = (d.items || []).map(item=>{
+           const info = item.volumeInfo || {};
+           return {
+              identifier: item.id,
+              title: info.title || 'Untitled',
+              creator: (info.authors && info.authors[0]) || 'Unknown',
+              subject: info.categories || [],
+              coverImage: info.imageLinks?.thumbnail || '',
+              previewLink: info.previewLink || info.infoLink || ''
+           };
+        });
+        let recs = docs
+           .filter(b=>b.identifier !== book.identifier)
+           .filter(isSafeBook);
+        recs = await filterDocsByCover(recs);
+        state.recommendations = recs.slice(0,5);
         const recContainer = document.getElementById('recommendations');
         if(recContainer) renderResults(state.recommendations, recContainer);
      }catch(err){
@@ -344,7 +393,6 @@
   // reader
   function openReader(book){
      if(!book) return;
-     // track viewed books (store entire object)
      if(!state.viewed.find(b=>b.identifier===book.identifier)){
         state.viewed.push(book);
         localStorage.setItem('librarium-viewed', JSON.stringify(state.viewed));
@@ -352,12 +400,14 @@
      dom.readerTitle && (dom.readerTitle.textContent = book.title||'Untitled');
      dom.readerAuthor && (dom.readerAuthor.textContent = book.creator||'Unknown');
      const iframe = document.createElement('iframe');
-     iframe.src = `https://archive.org/embed/${book.identifier}`;
+     iframe.src = book.previewLink || book.infoLink || '';
      iframe.style.width='100%';
      iframe.style.height='100%';
      iframe.style.border='none';
      const container = document.getElementById('pdf-viewer');
      if(container){ container.innerHTML = ''; container.appendChild(iframe); }
+     const external = document.getElementById('reader-external');
+     if(external) external.href = book.previewLink || book.infoLink || '#';
      switchView('reader');
      // fetch recommendations
      fetchRecommendations(book);
@@ -400,6 +450,25 @@
       }
     }
   });
+  // chat settings toggle/clear
+  const settingsToggle = document.getElementById('chat-settings-toggle');
+  const settingsPanel = document.getElementById('chat-settings');
+  if(settingsToggle && settingsPanel){
+    settingsToggle.addEventListener('click',()=>{
+      const visible = settingsPanel.style.display === 'block';
+      settingsPanel.style.display = visible ? 'none' : 'block';
+    });
+  }
+  // clear history button inside settings
+  const clearBtn = document.getElementById('settings-chat-clear');
+  if(clearBtn){
+    clearBtn.addEventListener('click',()=>{
+      state.chatMessages = [];
+      localStorage.setItem('librarium-chat', JSON.stringify(state.chatMessages));
+      renderChatMessages();
+      showToast('Chat history cleared');
+    });
+  }
   dom.chatSend.addEventListener('click', sendChatMessage);
   dom.chatInput.addEventListener('keydown', e=>{
      if(e.key==='Enter' && !e.shiftKey){
@@ -427,9 +496,10 @@
         }
      });
   }
-
+  // no key setup needed for Imagga (hard-coded)
   updateBadge();
   if(state.apiKey && dom.apiKeyInput) dom.apiKeyInput.value = state.apiKey;
+  // no deep api key to initialize
   updateChatUI();
   // show recommendations for most recently viewed book on load
   console.log('initial viewed', state.viewed);
