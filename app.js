@@ -151,9 +151,10 @@
      }
   }
   let currentDocs=[];
-  // query safety for search box: disallow inappropriate words (normalized to
-  // ignore symbols) – uses the same lists as the book filter plus explicit
-  // hentai titles.
+  // query safety for search box: disallow inappropriate words. the input
+  // listener also strips out any non-alphanumeric characters up front so
+  // users can't stuff symbols into a banned term ("$ex" -> "sex").
+  // normalization below still removes any stray punctuation for matching.
   const BANNED_QUERY_TERMS = [...NSFW_TERMS, ...HENTAI_TITLES];
   function isQuerySafe(q){
     if(!q) return true;
@@ -161,12 +162,15 @@
     return !BANNED_QUERY_TERMS.some(term => norm.includes(term));
   }
   async function searchBooks(q, page = 1){
-     if(!q.trim())return;
+     if(!q) return;
+     // sanitise the query in case someone bypasses the input listener
+     q = q.replace(/[^a-z0-9 ]/gi, '').trim();
+     if(!q) return;
      if(!isQuerySafe(q)){
         showToast('Search contains inappropriate words');
         return;
      }
-     state.searchQuery = q.trim();
+     state.searchQuery = q;
      state.currentPage = page;
      // make sure we're in the search view and show results container
      switchView('search');
@@ -495,9 +499,18 @@
   });
   // prevent typing banned terms live
   dom.searchInput.addEventListener('input', e=>{
-     const val = dom.searchInput.value;
+     let val = dom.searchInput.value;
+     // strip out any symbols immediately so they can't be used to
+     // circumvent the filter (e.g. "$ex" for "sex"). only allow
+     // letters, numbers and spaces in the search box.
+     const cleaned = val.replace(/[^a-z0-9 ]/gi, '');
+     if(cleaned !== val){
+        dom.searchInput.value = cleaned;
+        val = cleaned;
+        showToast('Symbols are not allowed');
+     }
+     // if the query contains a banned term, clear the box entirely
      if(!isQuerySafe(val)){
-        // remove last character attempt or clear
         dom.searchInput.value = '';
         showToast('That word isn\'t allowed');
      }
