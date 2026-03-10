@@ -32,7 +32,6 @@
     resultsTitle: document.getElementById('results-title'),
     resultsCount: document.getElementById('results-count'),
     results: document.getElementById('search-results'),
-    recSearch: document.getElementById('rec-search'),
     // library
     libraryBooks: document.getElementById('library-books'),
     libraryEmpty: document.getElementById('library-empty'),
@@ -134,6 +133,11 @@
      }finally{ state.isChatLoading = false; }
   }
   function toggleSave(book){
+     // disallow adding NSFW content
+     if(!isSafeBook(book)){
+        showToast('cannot save inappropriate book');
+        return;
+     }
      const i=state.library.findIndex(b=>b.identifier===book.identifier);
      if(i>-1){ state.library.splice(i,1); showToast('removed'); }
      else{ state.library.push(book); showToast('saved'); }
@@ -158,20 +162,60 @@
      try{
         const r=await fetch(url);
         const d=await r.json();
-        currentDocs=d.response.docs||[];
+        currentDocs=(d.response.docs||[]).filter(isSafeBook);
+        // numFound is the total returned by the API; after filtering the
+        // actual shown count may be smaller but we don't adjust the totalPages
+        // calculation since it's based on server-side results.
         state.numFound = d.response.numFound || 0;
         state.totalPages = Math.ceil(state.numFound / state.rowsPerPage);
         if(dom.resultsTitle) dom.resultsTitle.textContent = `Results for "${state.searchQuery}" - Page ${page} of ${state.totalPages}`;
-        if(dom.resultsCount) dom.resultsCount.textContent = `${state.numFound} books found`;
+        if(dom.resultsCount) dom.resultsCount.textContent = `${state.numFound} books found (${currentDocs.length} shown)`;
         renderResults(currentDocs);
         renderPagination();
      }catch(e){
         dom.results.textContent='Error fetching';
      }
   }
+  // simple NSFW filter – any book whose title or subject contains one of these
+  // terms will be hidden from the UI.  This is deliberately lightweight; more
+  // advanced checks could be added later.
+  const NSFW_TERMS = [
+    'porn',
+    'pornography',
+    'xxx',
+    'erotic',
+    'adult',
+    'nudity',
+    'sex',
+    'nsfw',
+    'hentai',
+    'bdsm',
+    'fetish',
+    'hardcore',
+    'softcore',
+    'explicit',
+    'uncensored',
+    'anal',
+    'oral',
+    'incest',
+    'bestiality',
+  ];
+
+  function isSafeBook(book) {
+    if(!book) return false;
+    let text = '';
+    if(book.title) text += book.title + ' ';
+    if(book.subject) {
+      if(Array.isArray(book.subject)) text += book.subject.join(' ');
+      else text += book.subject;
+    }
+    text = text.toLowerCase();
+    return !NSFW_TERMS.some(term => text.includes(term));
+  }
+
   function renderResults(docs, container = dom.results){
      container.innerHTML='';
-     docs.forEach(b=>{
+     docs.filter(isSafeBook).forEach(b=>{
         console.log('render book', b);
         const card = document.createElement('div');
         card.className = 'book-card';
@@ -240,18 +284,20 @@
      dom.viewLibrary.style.display = view === 'library' ? 'block' : 'none';
      dom.viewReader && (dom.viewReader.style.display = view === 'reader' ? 'block' : 'none');
      if(view !== 'search' && dom.resultsSection) dom.resultsSection.style.display = 'none';
-     if(view !== 'search' && dom.recSearch) dom.recSearch.style.display = 'none';
      document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
      if(view === 'library') renderLibrary();
   }
 
   function renderLibrary(){
-     if (state.library.length === 0) {
+     // filter out any NSFW items that might have been added before the
+     // filter was in place.
+     const safeLib = state.library.filter(isSafeBook);
+     if (safeLib.length === 0) {
         dom.libraryBooks.innerHTML = '';
         if(dom.libraryEmpty) dom.libraryEmpty.style.display = 'block';
      } else {
         if(dom.libraryEmpty) dom.libraryEmpty.style.display = 'none';
-        renderResults(state.library, dom.libraryBooks);
+        renderResults(safeLib, dom.libraryBooks);
      }
   }
 
@@ -284,15 +330,12 @@
         const r = await fetch(url);
         const d = await r.json();
         const docs = d.response.docs || [];
-        state.recommendations = docs.filter(b=>b.identifier!==book.identifier).slice(0,5);
+        state.recommendations = docs
+           .filter(b=>b.identifier!==book.identifier)
+           .filter(isSafeBook)
+           .slice(0,5);
         const recContainer = document.getElementById('recommendations');
         if(recContainer) renderResults(state.recommendations, recContainer);
-        const recSearch = document.getElementById('recommendations-search');
-        const recSection = document.getElementById('rec-search');
-        if(recSearch){
-           renderResults(state.recommendations, recSearch);
-           if(recSection) recSection.style.display = 'block';
-        }
      }catch(err){
         console.error('rec error', err);
      }
