@@ -151,36 +151,39 @@
      }
   }
   let currentDocs=[];
+  // query safety for search box: disallow inappropriate words (normalized to
+  // ignore symbols) – uses the same lists as the book filter plus explicit
+  // hentai titles.
+  const BANNED_QUERY_TERMS = [...NSFW_TERMS, ...HENTAI_TITLES];
+  function isQuerySafe(q){
+    if(!q) return true;
+    const norm = q.toLowerCase().replace(/[^a-z0-9 ]/g,'');
+    return !BANNED_QUERY_TERMS.some(term => norm.includes(term));
+  }
   async function searchBooks(q, page = 1){
      if(!q.trim())return;
+     if(!isQuerySafe(q)){
+        showToast('Search contains inappropriate words');
+        return;
+     }
      state.searchQuery = q.trim();
      state.currentPage = page;
+     // make sure we're in the search view and show results container
      switchView('search');
      if (dom.resultsSection) dom.resultsSection.style.display = 'block';
      dom.results.innerHTML='Searching…';
-     // Google Books API uses startIndex for pagination
-     const start = (page - 1) * state.rowsPerPage;
-     const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&startIndex=${start}&maxResults=${state.rowsPerPage}`;
+     const url = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(q)}+mediatype:texts&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=date&fl[]=subject&sort[]=downloads+desc&rows=${state.rowsPerPage}&page=${page}&output=json`;
      try{
-        const r = await fetch(url);
-        const d = await r.json();
-        const totalItems = d.totalItems || 0;
-        // normalize items into our book format
-        const docs = (d.items || []).map(item=>{
-           const info = item.volumeInfo || {};
-           return {
-              identifier: item.id,
-              title: info.title || 'Untitled',
-              creator: (info.authors && info.authors[0]) || 'Unknown',
-              subject: info.categories || [],
-              coverImage: info.imageLinks?.thumbnail || '',
-              previewLink: info.previewLink || info.infoLink || ''
-           };
-        });
-        currentDocs = docs.filter(isSafeBook);
+        const r=await fetch(url);
+        const d=await r.json();
+        currentDocs=(d.response.docs||[]).filter(isSafeBook);
+        // run cover safety checks in parallel
         currentDocs = await filterDocsByCover(currentDocs);
-        // clamp large totals to avoid billions-of-results weirdness
-        state.numFound = totalItems;
+        // numFound is the total returned by the API; after filtering the
+        // actual shown count may be smaller but we don't adjust the totalPages
+        // calculation since it's based on server-side results.
+        state.numFound = d.response.numFound || 0;
+        // clamp large totals just in case
         const displayTotal = state.numFound > 1000000 ? '>1,000,000' : state.numFound;
         const pagesBase = state.numFound > 1000000 ? 1000000 : state.numFound;
         state.totalPages = Math.ceil(pagesBase / state.rowsPerPage);
@@ -192,32 +195,95 @@
         dom.results.textContent='Error fetching';
      }
   }
-  // simple NSFW filter – any book whose title or subject contains one of these
-  // terms will be hidden from the UI.  This is deliberately lightweight; more
-  // advanced checks could be added later.
+  // Extended NSFW/inappropriate filter – this implements multiple layers of
+  // checks beyond just the subject field.  Books are rejected if any of the
+  // following conditions are met:
+  //   * they belong to a known blocked collection
+  //   * they lack sufficient metadata (title + at least one other field)
+  //   * their title matches suspicious patterns (lust, seduction, forbidden, etc.)
+  //   * any metadata field contains a prohibited term from NSFW_TERMS
+  // Trusted collections bypass the filters entirely, since they're known to
+  // be safe (educational/historical/library materials).
+  // Constants controlling behaviour follow.
   const NSFW_TERMS = [
-  // sexual content
-  'porn', 'pornography', 'xxx', 'erotic', 'adult', 'nudity', 'sex', 'nsfw', 
-  'hentai', 'bdsm', 'fetish', 'hardcore', 'softcore', 'explicit', 'uncensored',
-  'anal', 'oral', 'incest', 'bestiality', 'sexual', 'sexuality', 'masturbation', 
-  'cum', 'orgy', 'sexually explicit', 'rapey', 'prostitute', 'prostitution', 
-  'stripper', 'striptease', 'escort', 'erotica', 'pornographic', 'kink', 
-  'voyeur', 'adult content', 'adult material', 'sex scenes', 'adult novel', 
-  'nude photos', 'porn star', 'fetishism', 'sex toys', 'erotic fiction', 'soft porn', 
-  'porn star', 'seduction', 'sexual act', 'adult film', 'porn film', 'porno', 
-  'sexual abuse', 'sexual assault', 'sexploitation', 'naked', 'sexually explicit material'
-];
+    // sexual content
+    'porn', 'pornography', 'xxx', 'erotic', 'adult', 'nudity', 'sex', 'nsfw',
+    'hentai', 'bdsm', 'fetish', 'hardcore', 'softcore', 'explicit', 'uncensored',
+    'anal', 'oral', 'incest', 'bestiality', 'sexual', 'sexuality', 'masturbation',
+    'cum', 'orgy', 'sexually explicit', 'rapey', 'prostitute', 'prostitution',
+    'stripper', 'striptease', 'escort', 'erotica', 'pornographic', 'kink',
+    'voyeur', 'adult content', 'adult material', 'sex scenes', 'adult novel',
+    'nude photos', 'porn star', 'fetishism', 'sex toys', 'erotic fiction', 'soft porn',
+    'seduction', 'sexual act', 'adult film', 'porn film', 'porno',
+    'sexual abuse', 'sexual assault', 'sexploitation', 'naked', 'sexually explicit material'
+  ];
+
+  // specific hentai manga titles (or common patterns) to block explicitly
+  const HENTAI_TITLES = [
+    'naruto hentai',
+    'one piece hentai',
+    'attack on titan hentai',
+    'dragon ball hentai',
+    'bleach hentai',
+    'my hero academia hentai',
+    'dragonball hentai',
+    'fairy tail hentai',
+    'hentai', // catch general word as well
+  ];
+
+  const BLOCKED_COLLECTIONS = [
+    'pornographic', 'adult', 'xxx', 'sex', 'erotic', 'hentai'
+  ];
+
+  const TRUSTED_COLLECTIONS = [
+    'university-presses', 'literature-classics', 'americanlibraries', 'opensourcebooks'
+  ];
+
+  const SUSPICIOUS_TITLE_REGEX = /\b(lust|seduction|forbidden|erotic romance|naughty|sensual|sexual|passion(?:ate)? diary|secret lover)\b/i;
+
+  function hasMinimalMetadata(book) {
+    let count = 0;
+    if(book.title) count++;
+    if(book.subject && (Array.isArray(book.subject) ? book.subject.length : book.subject)) count++;
+    if(book.description) count++;
+    if(book.creator) count++;
+    if(book.collection) count++;
+    return count >= 2;
+  }
 
   function isSafeBook(book) {
     if(!book) return false;
-    let text = '';
-    if(book.title) text += book.title + ' ';
-    if(book.subject) {
-      if(Array.isArray(book.subject)) text += book.subject.join(' ');
-      else text += book.subject;
+    // trusted collections are always allowed
+    if(book.collection) {
+      const col = (Array.isArray(book.collection) ? book.collection[0] : book.collection).toLowerCase();
+      if(TRUSTED_COLLECTIONS.includes(col)) return true;
     }
+    // block known bad collections
+    if(book.collection) {
+      const col = (Array.isArray(book.collection) ? book.collection[0] : book.collection).toLowerCase();
+      if(BLOCKED_COLLECTIONS.includes(col)) return false;
+    }
+    // require more than just a title
+    if(!hasMinimalMetadata(book)) return false;
+    // suspicious title patterns
+    if(book.title) {
+      const t = book.title.toLowerCase();
+      if(SUSPICIOUS_TITLE_REGEX.test(book.title)) return false;
+      // explicit hentai series names
+      if(HENTAI_TITLES.some(ht => t.includes(ht))) return false;
+    }
+    // aggregate searchable text from metadata fields
+    let text = '';
+    ['title','description','subject','creator','collection'].forEach(f=>{
+      const v = book[f];
+      if(v){
+        if(Array.isArray(v)) text += v.join(' ')+ ' ';
+        else text += v + ' ';
+      }
+    });
     text = text.toLowerCase();
-    return !NSFW_TERMS.some(term => text.includes(term));
+    if(NSFW_TERMS.some(term => text.includes(term))) return false;
+    return true;
   }
 
   // cover-based check using an external NSFW detection service.  it takes the
@@ -253,7 +319,7 @@
   async function filterDocsByCover(docs) {
     const results = [];
     await Promise.all(docs.map(async b => {
-      const url = b.coverImage || '';
+      const url = `https://archive.org/services/img/${b.identifier}`;
       if (await isCoverSafe(url)) {
         results.push(b);
       }
@@ -270,7 +336,7 @@
         // cover image
         const cover = document.createElement('img');
         cover.className = 'book-cover';
-        cover.src = b.coverImage || '';
+        cover.src = `https://archive.org/services/img/${b.identifier}`;
         cover.alt = b.title || 'Cover';
         cover.onerror = () => cover.style.display = 'none';
         card.appendChild(cover);
@@ -354,32 +420,34 @@
   // recommendations algorithm
   async function fetchRecommendations(book){
      console.log('fetchRecommendations for', book);
-     let query = '';
+     // prefer subject tags when available
+     let url;
+     let subjects = [];
      if(book.subject){
-        if(Array.isArray(book.subject) && book.subject.length) query = 'subject:' + book.subject[0];
-        else if(typeof book.subject === 'string') query = 'subject:' + book.subject;
+        if(Array.isArray(book.subject)) subjects = book.subject;
+        else if(typeof book.subject === 'string'){
+           subjects = book.subject.split(/[;,]+/).map(s=>s.trim()).filter(Boolean);
+        }
      }
-     if(!query){
-        if(book.title) query = 'intitle:' + book.title;
-        else return;
+     if(subjects.length){
+        console.log('using subjects', subjects);
+        const terms = subjects.slice(0,5)
+            .map(t=>`subject:${encodeURIComponent(t)}`)
+            .join('%20OR%20');
+        url = `https://archive.org/advancedsearch.php?q=${terms}+mediatype:texts&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=subject&sort[]=downloads+desc&rows=10&page=1&output=json`;
+     } else {
+        const q = book.title || '';
+        if(!q) return;
+        console.log('no subjects; using title', q);
+        url = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(q)}+mediatype:texts&fl[]=identifier&fl[]=title&fl[]=creator&fl[]=subject&sort[]=downloads+desc&rows=10&page=1&output=json`;
      }
-     const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=10`;
+     console.log('recommendation URL', url);
      try{
         const r = await fetch(url);
         const d = await r.json();
-        const docs = (d.items || []).map(item=>{
-           const info = item.volumeInfo || {};
-           return {
-              identifier: item.id,
-              title: info.title || 'Untitled',
-              creator: (info.authors && info.authors[0]) || 'Unknown',
-              subject: info.categories || [],
-              coverImage: info.imageLinks?.thumbnail || '',
-              previewLink: info.previewLink || info.infoLink || ''
-           };
-        });
+        const docs = d.response.docs || [];
         let recs = docs
-           .filter(b=>b.identifier !== book.identifier)
+           .filter(b=>b.identifier!==book.identifier)
            .filter(isSafeBook);
         recs = await filterDocsByCover(recs);
         state.recommendations = recs.slice(0,5);
@@ -393,6 +461,7 @@
   // reader
   function openReader(book){
      if(!book) return;
+     // track viewed books (store entire object)
      if(!state.viewed.find(b=>b.identifier===book.identifier)){
         state.viewed.push(book);
         localStorage.setItem('librarium-viewed', JSON.stringify(state.viewed));
@@ -400,14 +469,12 @@
      dom.readerTitle && (dom.readerTitle.textContent = book.title||'Untitled');
      dom.readerAuthor && (dom.readerAuthor.textContent = book.creator||'Unknown');
      const iframe = document.createElement('iframe');
-     iframe.src = book.previewLink || book.infoLink || '';
+     iframe.src = `https://archive.org/embed/${book.identifier}`;
      iframe.style.width='100%';
      iframe.style.height='100%';
      iframe.style.border='none';
      const container = document.getElementById('pdf-viewer');
      if(container){ container.innerHTML = ''; container.appendChild(iframe); }
-     const external = document.getElementById('reader-external');
-     if(external) external.href = book.previewLink || book.infoLink || '#';
      switchView('reader');
      // fetch recommendations
      fetchRecommendations(book);
@@ -420,7 +487,21 @@
 
 
   dom.searchBtn.addEventListener('click',()=>searchBooks(dom.searchInput.value));
-  dom.searchInput.addEventListener('keypress',e=>{if(e.key==='Enter')searchBooks(dom.searchInput.value)});
+  dom.searchInput.addEventListener('keypress',e=>{
+     if(e.key==='Enter'){
+        e.preventDefault();
+        searchBooks(dom.searchInput.value);
+     }
+  });
+  // prevent typing banned terms live
+  dom.searchInput.addEventListener('input', e=>{
+     const val = dom.searchInput.value;
+     if(!isQuerySafe(val)){
+        // remove last character attempt or clear
+        dom.searchInput.value = '';
+        showToast('That word isn\'t allowed');
+     }
+  });
   if(dom.readerBack) dom.readerBack.addEventListener('click', closeReader);
 
   // suggestion chips
@@ -511,7 +592,12 @@
 })();
 
 // hide preloader when page finishes loading
-window.addEventListener('load', () => {
+function hidePreloader(){
   const pre = document.getElementById('preloader');
-  if (pre) pre.classList.add('hidden');
-});
+  if(pre) pre.classList.add('hidden');
+}
+window.addEventListener('load', hidePreloader);
+// if script runs after load, ensure preloader is hidden immediately
+if(document.readyState === 'complete'){
+  hidePreloader();
+}
