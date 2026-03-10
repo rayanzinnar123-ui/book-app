@@ -155,11 +155,14 @@
   // listener also strips out any non-alphanumeric characters up front so
   // users can't stuff symbols into a banned term ("$ex" -> "sex").
   // normalization below still removes any stray punctuation for matching.
-  const BANNED_QUERY_TERMS = [...NSFW_TERMS, ...HENTAI_TITLES];
   function isQuerySafe(q){
     if(!q) return true;
     const norm = q.toLowerCase().replace(/[^a-z0-9 ]/g,'');
-    return !BANNED_QUERY_TERMS.some(term => norm.includes(term));
+    // build list here so we don't reference NSFW_TERMS/HENTAI_TITLES before
+    // they're defined – the previous constant caused a runtime error that
+    // prevented the script from finishing, leaving the preloader visible.
+    const banned = [...NSFW_TERMS, ...HENTAI_TITLES];
+    return !banned.some(term => norm.includes(term));
   }
   async function searchBooks(q, page = 1){
      if(!q) return;
@@ -219,7 +222,8 @@
     'voyeur', 'adult content', 'adult material', 'sex scenes', 'adult novel',
     'nude photos', 'porn star', 'fetishism', 'sex toys', 'erotic fiction', 'soft porn',
     'seduction', 'sexual act', 'adult film', 'porn film', 'porno',
-    'sexual abuse', 'sexual assault', 'sexploitation', 'naked', 'sexually explicit material'
+    'sexual abuse', 'sexual assault', 'sexploitation', 'naked', 'sexually explicit material',
+    'negro', 'nigga','fuck','anal','rough','love island',
   ];
 
   // specific hentai manga titles (or common patterns) to block explicitly
