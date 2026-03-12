@@ -246,8 +246,8 @@
       'erotic', 'erotica', 'erotic fiction', 'erotic novel', 'erotic romance', 'erotic story',
       'erotic tales', 'sexual', 'sexuality', 'sexual content', 'sexual themes', 'sexual fantasy',
       'sexual encounter', 'sexual desire', 'sexual tension', 'sexual relationship', 'sex scenes',
-      'steamy', 'sensual', 'lust', 'passion', 'forbidden desire', 'taboo', 'temptation',
-
+      'steamy', 'sensual', 'lust', 'passion', 'forbidden desire', 'taboo', 'temptation', 'desire', 'desires', 'desiring', 
+      
       'sex', 'anal', 'oral', 'blowjob', 'handjob', 'deepthroat', 'threesome', 'foursome',
       'orgy', 'gangbang', 'cum', 'creampie', 'facial', 'penetration', 'intercourse',
 
