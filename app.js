@@ -134,11 +134,6 @@
       } finally { state.isChatLoading = false; }
    }
    function toggleSave(book) {
-      // disallow adding NSFW content
-      if (!isSafeBook(book)) {
-         showToast('cannot save inappropriate book');
-         return;
-      }
       const i = state.library.findIndex(b => b.identifier === book.identifier);
       if (i > -1) { state.library.splice(i, 1); showToast('removed'); }
       else { state.library.push(book); showToast('saved'); }
@@ -151,55 +146,13 @@
       }
    }
    let currentDocs = [];
-   // query safety for search box: disallow inappropriate words. the input
-   // listener also strips out any non-alphanumeric characters up front so
-   // users can't stuff symbols into a banned term ("$ex" -> "sex").
-   // normalization below still removes any stray punctuation for matching.
 
-   function normalizeText(text) {
-      return text
-         .toLowerCase()
-         .replace(/3/g, 'e')
-         .replace(/1/g, 'i')
-         .replace(/0/g, 'o')
-         .replace(/5/g, 's')
-         .replace(/4/g, 'a')
-         .replace(/7/g, 't');
-   }
-
-   // escape string for use in a regular expression
-   function escapeRegex(str) {
-      return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-   }
-
-   function isQuerySafe(q) {
-      if (!q) return true;
-
-      // normalize leetspeak, convert separators to spaces, and strip any
-      // remaining characters that aren't alphanumeric or whitespace.  dots,
-      // dashes and underscores are treated as word boundaries so "bra." will
-      // still match but "brave" will not.
-      const norm = normalizeText(q)
-         .replace(/[\-_.]/g, ' ')
-         .replace(/[^a-z0-9 ]/g, '');
-
-      const banned = [...NSFW_TERMS, ...HENTAI_TITLES];
-
-      // check each banned term with word boundaries so substrings don't trigger.
-      return !banned.some(term => {
-         const re = new RegExp('\\b' + escapeRegex(term) + '\\b', 'i');
-         return re.test(norm);
-      });
-   }
+   // simple search routine; no content filtering is performed
    async function searchBooks(q, page = 1) {
       if (!q) return;
       // sanitise the query in case someone bypasses the input listener
       q = q.replace(/[^a-z0-9 ]/gi, '').trim();
       if (!q) return;
-      if (!isQuerySafe(q)) {
-         showToast('Search contains inappropriate words');
-         return;
-      }
       state.searchQuery = q;
       state.currentPage = page;
       // make sure we're in the search view and show results container
@@ -210,9 +163,7 @@
       try {
          const r = await fetch(url);
          const d = await r.json();
-         currentDocs = (d.response.docs || []).filter(isSafeBook);
-         // run cover safety checks in parallel
-         currentDocs = await filterDocsByCover(currentDocs);
+         currentDocs = d.response.docs || [];
          // numFound is the total returned by the API; after filtering the
          // actual shown count may be smaller but we don't adjust the totalPages
          // calculation since it's based on server-side results.
@@ -229,178 +180,11 @@
          dom.results.textContent = 'Error fetching';
       }
    }
-   // Extended NSFW/inappropriate filter – this implements multiple layers of
-   // checks beyond just the subject field.  Books are rejected if any of the
-   // following conditions are met:
-   //   * they belong to a known blocked collection
-   //   * they lack sufficient metadata (title + at least one other field)
-   //   * their title matches suspicious patterns (lust, seduction, forbidden, etc.)
-   //   * any metadata field contains a prohibited term from NSFW_TERMS
-   // Trusted collections bypass the filters entirely, since they're known to
-   // be safe (educational/historical/library materials).
-   // Constants controlling behaviour follow.
-   const NSFW_TERMS = [
-      'porn', 'pornography', 'porno', 'xxx', 'adult', 'nsfw', 'x-rated', '18+', 'mature', 'explicit',
-      'uncensored', 'adult content', 'adult material', 'adult fiction', 'adult novel',
-
-      'erotic', 'erotica', 'erotic fiction', 'erotic novel', 'erotic romance', 'erotic story',
-      'erotic tales', 'sexual', 'sexuality', 'sexual content', 'sexual themes', 'sexual fantasy',
-      'sexual encounter', 'sexual desire', 'sexual tension', 'sexual relationship', 'sex scenes',
-      'steamy', 'sensual', 'lust', 'passion', 'forbidden desire', 'taboo', 'temptation',
-
-      'sex', 'anal', 'oral', 'blowjob', 'handjob', 'deepthroat', 'threesome', 'foursome',
-      'orgy', 'gangbang', 'cum', 'creampie', 'facial', 'penetration', 'intercourse',
-
-      'nude', 'nudity', 'naked', 'topless', 'bottomless', 'undressed', 'bare', 'skin',
-      'lingerie', 'panties', 'bra', 'stockings', 'garter', 'strip', 'striptease',
-
-      'pussy', 'cock', 'dick', 'vagina', 'penis', 'boobs', 'breasts', 'tits', 'ass', 'butt',
-      'booty', 'milf', 'cougar', 'stud', 'slut', 'whore', 'bitch', 'horny',
-
-      'bdsm', 'bondage', 'dominance', 'domination', 'submission', 'submissive', 'dominatrix',
-      'kink', 'kinky', 'fetish', 'fetishism', 'sadism', 'masochism', 'voyeur', 'voyeurism',
-      'exhibitionism', 'roleplay', 'spanking', 'whipping', 'choking', 'leather', 'latex',
-
-      'escort', 'escorts', 'prostitute', 'prostitution', 'brothel', 'call girl',
-      'stripper', 'strip club', 'sex worker', 'adult film', 'porn film', 'porn star',
-
-      'hentai', 'ecchi', 'yaoi', 'yuri', 'doujin', 'doujinshi', 'rule34', 'fanservice',
-      'lewd', 'pervy', 'perverted', 'nigga',
-
-      'incest', 'stepmom', 'stepmother', 'stepdad', 'stepfather', 'stepbrother', 'stepsister',
-      'forbidden family', 'taboo family',
-
-      'rape', 'rapey', 'sexual abuse', 'sexual assault', 'molestation', 'sexploitation',
-
-      'temptress', 'seductress', 'seduction', 'pleasure', 'carnal', 'intimate', 'bedroom',
-      'lovers', 'lover', 'mistress', 'affair', 'cheating', 'adultery',
-
-      'fantasy lover', 'alpha male', 'reverse harem', 'harem', 'dark romance', 'bad boy',
-      'billionaire romance', 'possessive hero', 'dominant male', 'submissive girl',
-
-      'pleasure house', 'pleasure club', 'love slave', 'sex slave', 'obedience training',
-      'sub training', 'dominant training', 'dildo', 'vibrator',
-
-      'fetish club', 'swingers', 'swinging', 'wife sharing', 'hotwife',
-
-      'erotic photography', 'nude photography', 'adult photography', 'sex pictures',
-
-      'uncut', 'raw', 'hardcore', 'softcore', 'dirty', 'filthy', 'naughty', 'sinful',
-      'wicked', 'depraved', 'perversion', 'indecent', 'obscene'
-   ];
-
-   // specific hentai manga titles (or common patterns) to block explicitly
-   const HENTAI_TITLES = [
-      'naruto hentai',
-      'one piece hentai',
-      'attack on titan hentai',
-      'dragon ball hentai',
-      'bleach hentai',
-      'my hero academia hentai',
-      'dragonball hentai',
-      'fairy tail hentai',
-      'hentai', // catch general word as well
-   ];
-
-   const BLOCKED_COLLECTIONS = [
-      'pornographic', 'adult', 'xxx', 'sex', 'erotic', 'hentai'
-   ];
-
-   const TRUSTED_COLLECTIONS = [
-      'university-presses', 'literature-classics', 'americanlibraries', 'opensourcebooks'
-   ];
-
-   const SUSPICIOUS_TITLE_REGEX = /\b(lust|seduction|forbidden|erotic romance|naughty|sensual|sexual|passion(?:ate)? diary|secret lover)\b/i;
-
-   function hasMinimalMetadata(book) {
-      let count = 0;
-      if (book.title) count++;
-      if (book.subject && (Array.isArray(book.subject) ? book.subject.length : book.subject)) count++;
-      if (book.description) count++;
-      if (book.creator) count++;
-      if (book.collection) count++;
-      return count >= 2;
-   }
-
-   function isSafeBook(book) {
-      if (!book) return false;
-      // trusted collections are always allowed
-      if (book.collection) {
-         const col = (Array.isArray(book.collection) ? book.collection[0] : book.collection).toLowerCase();
-         if (TRUSTED_COLLECTIONS.includes(col)) return true;
-      }
-      // block known bad collections
-      if (book.collection) {
-         const col = (Array.isArray(book.collection) ? book.collection[0] : book.collection).toLowerCase();
-         if (BLOCKED_COLLECTIONS.includes(col)) return false;
-      }
-      // require more than just a title
-      if (!hasMinimalMetadata(book)) return false;
-      // suspicious title patterns
-      if (book.title) {
-         const t = book.title.toLowerCase();
-         if (SUSPICIOUS_TITLE_REGEX.test(book.title)) return false;
-         // explicit hentai series names
-         if (HENTAI_TITLES.some(ht => t.includes(ht))) return false;
-      }
-      // aggregate searchable text from metadata fields
-      let text = '';
-      ['title', 'description', 'subject', 'creator', 'collection'].forEach(f => {
-         const v = book[f];
-         if (v) {
-            if (Array.isArray(v)) text += v.join(' ') + ' ';
-            else text += v + ' ';
-         }
-      });
-      text = text.toLowerCase();
-      if (NSFW_TERMS.some(term => text.includes(term))) return false;
-      return true;
-   }
-
-   // cover-based check using an external NSFW detection service.  it takes the
-   // URL of the image and returns true if it's considered safe.  this API is
-   // fictitious; replace with a real service (Sightengine, Google Vision, etc.)
-   // cover-based sanity check using Imagga's Content Moderation API.  a
-   // hard-coded API key is used; no user input is required as per the request.
-   async function isCoverSafe(imageUrl) {
-      try {
-         const resp = await fetch('https://api.imagga.com/v2/contentmoderation?image_url=' + encodeURIComponent(imageUrl), {
-            headers: {
-               Authorization: 'Basic ' + btoa('acc_e40fa00929f364c'),
-            }
-         });
-         const data = await resp.json();
-         // Imagga returns moderation categories; consider pornographic/explicit
-         // if any confidence above threshold.
-         const result = data.result || {};
-         const categories = result.categories || {};
-         // categories.pornography might exist with confidence value
-         if (categories.pornography && categories.pornography.confidence > 0.5) {
-            return false;
-         }
-         return true;
-      } catch (err) {
-         console.warn('cover check failed', err);
-         return true;
-      }
-   }
-
-   // filter a list of docs by running their covers through the NSFW check.
-   // returns a new array containing only the safe ones.
-   async function filterDocsByCover(docs) {
-      const results = [];
-      await Promise.all(docs.map(async b => {
-         const url = `https://archive.org/services/img/${b.identifier}`;
-         if (await isCoverSafe(url)) {
-            results.push(b);
-         }
-      }));
-      return results;
-   }
-
+   // Content filtering removed; all books and queries are allowed.
+   // previous safety checks have been stripped from the project.
    function renderResults(docs, container = dom.results) {
       container.innerHTML = '';
-      docs.filter(isSafeBook).forEach(b => {
+      docs.forEach(b => {
          console.log('render book', b);
          const card = document.createElement('div');
          card.className = 'book-card';
@@ -474,17 +258,13 @@
    }
 
    async function renderLibrary() {
-      // filter out any NSFW items that might have been added before the
-      // filter was in place.
-      let safeLib = state.library.filter(isSafeBook);
-      // also check the covers
-      safeLib = await filterDocsByCover(safeLib);
-      if (safeLib.length === 0) {
+      // show entire library without any filtering
+      if (state.library.length === 0) {
          dom.libraryBooks.innerHTML = '';
          if (dom.libraryEmpty) dom.libraryEmpty.style.display = 'block';
       } else {
          if (dom.libraryEmpty) dom.libraryEmpty.style.display = 'none';
-         renderResults(safeLib, dom.libraryBooks);
+         renderResults(state.library, dom.libraryBooks);
       }
    }
 
@@ -517,10 +297,7 @@
          const r = await fetch(url);
          const d = await r.json();
          const docs = d.response.docs || [];
-         let recs = docs
-            .filter(b => b.identifier !== book.identifier)
-            .filter(isSafeBook);
-         recs = await filterDocsByCover(recs);
+         let recs = docs.filter(b => b.identifier !== book.identifier);
          state.recommendations = recs.slice(0, 5);
          const recContainer = document.getElementById('recommendations');
          if (recContainer) renderResults(state.recommendations, recContainer);
@@ -564,31 +341,13 @@
          searchBooks(dom.searchInput.value);
       }
    });
-   // prevent typing banned terms live
+   // live sanitization: only allow letters, numbers and spaces in search
    dom.searchInput.addEventListener('input', e => {
-      let val = dom.searchInput.value;
-      // allow letters, numbers, spaces and common word separators (.-_). the
-      // normalization step in isQuerySafe treats those separators as boundaries
-      // when checking against banned terms.
-      const cleaned = val.replace(/[^a-z0-9 .\-_]/gi, '');
-      if (cleaned !== val) {
+      const cleaned = dom.searchInput.value.replace(/[^a-z0-9 ]/gi, '');
+      if (cleaned !== dom.searchInput.value) {
          dom.searchInput.value = cleaned;
-         val = cleaned;
-         showToast('Only letters, numbers and .-_ are allowed');
+         showToast('Only letters and numbers allowed');
       }
-      // only validate words that have been terminated by a separator
-      let toTest = val;
-      if (!/[\s._-]$/.test(val)) {
-         // drop the current trailing partial word
-         toTest = val.replace(/\b[^\s._-]+$/, '');
-      }
-   if (toTest && !isQuerySafe(toTest)) {
-      // remove the offending completed word but leave the rest of the input
-      // intact. the regex below strips the last word and any trailing
-      // separator that triggered the check.
-      dom.searchInput.value = val.replace(/[^\s._-]*[\s._-]?$/, '');
-      showToast('That word isn\'t allowed');
-   }
 });
 if (dom.readerBack) dom.readerBack.addEventListener('click', closeReader);
 
