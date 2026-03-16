@@ -1,4 +1,4 @@
-﻿// simple librarium
+﻿﻿// simple librarium
 (function () {
    'use strict';
    const state = {
@@ -146,10 +146,8 @@
       }
    }
    let currentDocs = [];
-   
 
-      
-   }
+   // simple search routine; no content filtering is performed
    async function searchBooks(q, page = 1) {
       if (!q) return;
       // sanitise the query in case someone bypasses the input listener
