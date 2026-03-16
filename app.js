@@ -1,4 +1,4 @@
-﻿// simple librarium
+﻿﻿// simple librarium
 (function () {
    'use strict';
    const state = {
@@ -146,46 +146,8 @@
       }
    }
    let currentDocs = [];
-   // query safety for search box: disallow inappropriate words. the input
-   // listener also strips out any non-alphanumeric characters up front so
-   // users can't stuff symbols into a banned term ("$ex" -> "sex").
-   // normalization below still removes any stray punctuation for matching.
 
-   function normalizeText(text) {
-      return text
-         .toLowerCase()
-         .replace(/3/g, 'e')
-         .replace(/1/g, 'i')
-         .replace(/0/g, 'o')
-         .replace(/5/g, 's')
-         .replace(/4/g, 'a')
-         .replace(/7/g, 't');
-   }
-
-   // escape string for use in a regular expression
-   function escapeRegex(str) {
-      return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-   }
-
-   function isQuerySafe(q) {
-      if (!q) return true;
-
-      // normalize leetspeak, convert separators to spaces, and strip any
-      // remaining characters that aren't alphanumeric or whitespace.  dots,
-      // dashes and underscores are treated as word boundaries so "bra." will
-      // still match but "brave" will not.
-      const norm = normalizeText(q)
-         .replace(/[\-_.]/g, ' ')
-         .replace(/[^a-z0-9 ]/g, '');
-
-      const banned = [...NSFW_TERMS, ...HENTAI_TITLES];
-
-      // check each banned term with word boundaries so substrings don't trigger.
-      return !banned.some(term => {
-         const re = new RegExp('\\b' + escapeRegex(term) + '\\b', 'i');
-         return re.test(norm);
-      });
-   }
+   // simple search routine; no content filtering is performed
    async function searchBooks(q, page = 1) {
       if (!q) return;
       // sanitise the query in case someone bypasses the input listener
