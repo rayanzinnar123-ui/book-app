@@ -180,8 +180,180 @@
          dom.results.textContent = 'Error fetching';
       }
    }
+<<<<<<< HEAD
    // Content filtering removed; all books and queries are allowed.
    // previous safety checks have been stripped from the project.
+=======
+   // Extended NSFW/inappropriate filter – this implements multiple layers of
+   // checks beyond just the subject field.  Books are rejected if any of the
+   // following conditions are met:
+   //   * they belong to a known blocked collection
+   //   * they lack sufficient metadata (title + at least one other field)
+   //   * their title matches suspicious patterns (lust, seduction, forbidden, etc.)
+   //   * any metadata field contains a prohibited term from NSFW_TERMS
+   // Trusted collections bypass the filters entirely, since they're known to
+   // be safe (educational/historical/library materials).
+   // Constants controlling behaviour follow.
+   const NSFW_TERMS = [
+      'porn', 'pornography', 'porno', 'xxx', 'adult', 'nsfw', 'x-rated', '18+', 'mature', 'explicit',
+      'uncensored', 'adult content', 'adult material', 'adult fiction', 'adult novel',
+
+      'erotic', 'erotica', 'erotic fiction', 'erotic novel', 'erotic romance', 'erotic story',
+      'erotic tales', 'sexual', 'sexuality', 'sexual content', 'sexual themes', 'sexual fantasy',
+      'sexual encounter', 'sexual desire', 'sexual tension', 'sexual relationship', 'sex scenes',
+      'steamy', 'sensual', 'lust', 'passion', 'forbidden desire', 'taboo', 'temptation', 'desire', 'desires', 'desiring', 
+      
+      'sex', 'anal', 'oral', 'blowjob', 'handjob', 'deepthroat', 'threesome', 'foursome',
+      'orgy', 'gangbang', 'cum', 'creampie', 'facial', 'penetration', 'intercourse',
+
+      'nude', 'nudity', 'naked', 'topless', 'bottomless', 'undressed', 'bare', 'skin',
+      'lingerie', 'panties', 'bra', 'stockings', 'garter', 'strip', 'striptease',
+
+      'pussy', 'cock', 'dick', 'vagina', 'penis', 'boobs', 'breasts', 'tits', 'ass', 'butt',
+      'booty', 'milf', 'cougar', 'stud', 'slut', 'whore', 'bitch', 'horny',
+
+      'bdsm', 'bondage', 'dominance', 'domination', 'submission', 'submissive', 'dominatrix',
+      'kink', 'kinky', 'fetish', 'fetishism', 'sadism', 'masochism', 'voyeur', 'voyeurism',
+      'exhibitionism', 'roleplay', 'spanking', 'whipping', 'choking', 'leather', 'latex',
+
+      'escort', 'escorts', 'prostitute', 'prostitution', 'brothel', 'call girl',
+      'stripper', 'strip club', 'sex worker', 'adult film', 'porn film', 'porn star',
+
+      'hentai', 'ecchi', 'yaoi', 'yuri', 'doujin', 'doujinshi', 'rule34', 'fanservice',
+      'lewd', 'pervy', 'perverted', 'nigga',
+
+      'incest', 'stepmom', 'stepmother', 'stepdad', 'stepfather', 'stepbrother', 'stepsister',
+      'forbidden family', 'taboo family',
+
+      'rape', 'rapey', 'sexual abuse', 'sexual assault', 'molestation', 'sexploitation',
+
+      'temptress', 'seductress', 'seduction', 'pleasure', 'carnal', 'intimate', 'bedroom',
+      'lovers', 'lover', 'mistress', 'affair', 'cheating', 'adultery',
+
+      'fantasy lover', 'alpha male', 'reverse harem', 'harem', 'dark romance', 'bad boy',
+      'billionaire romance', 'possessive hero', 'dominant male', 'submissive girl',
+
+      'pleasure house', 'pleasure club', 'love slave', 'sex slave', 'obedience training',
+      'sub training', 'dominant training', 'dildo', 'vibrator',
+
+      'fetish club', 'swingers', 'swinging', 'wife sharing', 'hotwife',
+
+      'erotic photography', 'nude photography', 'adult photography', 'sex pictures',
+
+      'uncut', 'raw', 'hardcore', 'softcore', 'dirty', 'filthy', 'naughty', 'sinful',
+      'wicked', 'depraved', 'perversion', 'indecent', 'obscene'
+   ];
+
+   // specific hentai manga titles (or common patterns) to block explicitly
+   const HENTAI_TITLES = [
+      'naruto hentai',
+      'one piece hentai',
+      'attack on titan hentai',
+      'dragon ball hentai',
+      'bleach hentai',
+      'my hero academia hentai',
+      'dragonball hentai',
+      'fairy tail hentai',
+      'hentai', // catch general word as well
+   ];
+
+   const BLOCKED_COLLECTIONS = [
+      'pornographic', 'adult', 'xxx', 'sex', 'erotic', 'hentai'
+   ];
+
+   const TRUSTED_COLLECTIONS = [
+      'university-presses', 'literature-classics', 'americanlibraries', 'opensourcebooks'
+   ];
+
+   const SUSPICIOUS_TITLE_REGEX = /\b(lust|seduction|forbidden|erotic romance|naughty|sensual|sexual|passion(?:ate)? diary|secret lover)\b/i;
+
+   function hasMinimalMetadata(book) {
+      let count = 0;
+      if (book.title) count++;
+      if (book.subject && (Array.isArray(book.subject) ? book.subject.length : book.subject)) count++;
+      if (book.description) count++;
+      if (book.creator) count++;
+      if (book.collection) count++;
+      return count >= 2;
+   }
+
+   function isSafeBook(book) {
+      if (!book) return false;
+      // trusted collections are always allowed
+      if (book.collection) {
+         const col = (Array.isArray(book.collection) ? book.collection[0] : book.collection).toLowerCase();
+         if (TRUSTED_COLLECTIONS.includes(col)) return true;
+      }
+      // block known bad collections
+      if (book.collection) {
+         const col = (Array.isArray(book.collection) ? book.collection[0] : book.collection).toLowerCase();
+         if (BLOCKED_COLLECTIONS.includes(col)) return false;
+      }
+      // require more than just a title
+      if (!hasMinimalMetadata(book)) return false;
+      // suspicious title patterns
+      if (book.title) {
+         const t = book.title.toLowerCase();
+         if (SUSPICIOUS_TITLE_REGEX.test(book.title)) return false;
+         // explicit hentai series names
+         if (HENTAI_TITLES.some(ht => t.includes(ht))) return false;
+      }
+      // aggregate searchable text from metadata fields
+      let text = '';
+      ['title', 'description', 'subject', 'creator', 'collection'].forEach(f => {
+         const v = book[f];
+         if (v) {
+            if (Array.isArray(v)) text += v.join(' ') + ' ';
+            else text += v + ' ';
+         }
+      });
+      text = text.toLowerCase();
+      if (NSFW_TERMS.some(term => text.includes(term))) return false;
+      return true;
+   }
+
+   // cover-based check using an external NSFW detection service.  it takes the
+   // URL of the image and returns true if it's considered safe.  this API is
+   // fictitious; replace with a real service (Sightengine, Google Vision, etc.)
+   // cover-based sanity check using Imagga's Content Moderation API.  a
+   // hard-coded API key is used; no user input is required as per the request.
+   async function isCoverSafe(imageUrl) {
+      try {
+         const resp = await fetch('https://api.imagga.com/v2/contentmoderation?image_url=' + encodeURIComponent(imageUrl), {
+            headers: {
+               Authorization: 'Basic ' + btoa('acc_e40fa00929f364c'),
+            }
+         });
+         const data = await resp.json();
+         // Imagga returns moderation categories; consider pornographic/explicit
+         // if any confidence above threshold.
+         const result = data.result || {};
+         const categories = result.categories || {};
+         // categories.pornography might exist with confidence value
+         if (categories.pornography && categories.pornography.confidence > 0.5) {
+            return false;
+         }
+         return true;
+      } catch (err) {
+         console.warn('cover check failed', err);
+         return true;
+      }
+   }
+
+   // filter a list of docs by running their covers through the NSFW check.
+   // returns a new array containing only the safe ones.
+   async function filterDocsByCover(docs) {
+      const results = [];
+      await Promise.all(docs.map(async b => {
+         const url = `https://archive.org/services/img/${b.identifier}`;
+         if (await isCoverSafe(url)) {
+            results.push(b);
+         }
+      }));
+      return results;
+   }
+
+>>>>>>> a2171adbed7b0c0fee85cd9e6e35388a398ad805
    function renderResults(docs, container = dom.results) {
       container.innerHTML = '';
       docs.forEach(b => {
